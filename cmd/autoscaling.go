@@ -1,0 +1,184 @@
+package cmd
+
+import (
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"github.com/dme86/goaws/goaws"
+)
+
+func init() {
+	RootCmd.AddCommand(newAutoscalingCmd())
+}
+
+func newAutoscalingCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "autoscaling",
+		Aliases: []string{"as"},
+		Short:   "Manage autoscaling resources",
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Help() // nolint: errcheck
+		},
+	}
+
+	cmd.AddCommand(
+		newAutoscalingLsCmd(),
+		newAutoscalingAttachCmd(),
+		newAutoscalingDetachCmd(),
+		newAutoscalingUpdateCmd(),
+	)
+
+	return cmd
+}
+
+func newAutoscalingLsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ls",
+		Short: "List autoscaling groups",
+		RunE:  runAutoscalingLsCmd,
+	}
+
+	flags := cmd.Flags()
+	flags.BoolP("all", "a", false, "List all autoscaling groups (by default, list autoscaling groups only having at least 1 attached instance)")
+
+	viper.BindPFlag("autoscaling.ls.all", flags.Lookup("all")) // nolint: errcheck
+
+	return cmd
+}
+
+func runAutoscalingLsCmd(cmd *cobra.Command, args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return errors.Wrap(err, "newClient failed:")
+	}
+
+	options := goaws.AutoscalingLsOptions{
+		All: viper.GetBool("autoscaling.ls.all"),
+	}
+
+	return client.AutoscalingLs(options)
+}
+
+func newAutoscalingAttachCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "attach AUTO_SCALING_GROUP_NAME",
+		Short: "Attach instances/loadbalancers to autoscaling group",
+		RunE:  runAutoscalingAttachCmd,
+	}
+
+	flags := cmd.Flags()
+	flags.StringP("instance-ids", "i", "", "One or more instance IDs")
+	flags.StringP("load-balancer-names", "l", "", "One or more load balancer names")
+	flags.BoolP("wait", "w", false, "Wait until desired capacity instances are InService")
+
+	viper.BindPFlag("autoscaling.attach.instance-ids", flags.Lookup("instance-ids"))               // nolint: errcheck
+	viper.BindPFlag("autoscaling.attach.load-balancer-names", flags.Lookup("load-balancer-names")) // nolint: errcheck
+	viper.BindPFlag("autoscaling.attach.wait", flags.Lookup("wait"))                               // nolint: errcheck
+
+	return cmd
+}
+
+func runAutoscalingAttachCmd(cmd *cobra.Command, args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return errors.Wrap(err, "newClient failed:")
+	}
+
+	if len(args) == 0 {
+		return errors.New("AUTO_SCALING_GROUP_NAME is required")
+	}
+
+	instanceIds := aws.StringSlice(viper.GetStringSlice("autoscaling.attach.instance-ids"))
+	loadBalancerNames := aws.StringSlice(viper.GetStringSlice("autoscaling.attach.load-balancer-names"))
+	options := goaws.AutoscalingAttachOptions{
+		AsgName:           args[0],
+		InstanceIds:       instanceIds,
+		LoadBalancerNames: loadBalancerNames,
+		Wait:              viper.GetBool("autoscaling.attach.wait"),
+	}
+
+	return client.AutoscalingAttach(options)
+}
+
+func newAutoscalingDetachCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "detach AUTO_SCALING_GROUP_NAME",
+		Short: "Detach instances/loadbalancers from autoscaling group",
+		RunE:  runAutoscalingDetachCmd,
+	}
+
+	flags := cmd.Flags()
+	flags.StringP("instance-ids", "i", "", "One or more instance IDs")
+	flags.StringP("load-balancer-names", "l", "", "One or more load balancer names")
+	flags.BoolP("wait", "w", false, "Wait until desired capacity instances are InService")
+
+	viper.BindPFlag("autoscaling.detach.instance-ids", flags.Lookup("instance-ids"))               // nolint: errcheck
+	viper.BindPFlag("autoscaling.detach.load-balancer-names", flags.Lookup("load-balancer-names")) // nolint: errcheck
+	viper.BindPFlag("autoscaling.detach.wait", flags.Lookup("wait"))                               // nolint: errcheck
+
+	return cmd
+}
+
+func runAutoscalingDetachCmd(cmd *cobra.Command, args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return errors.Wrap(err, "newClient failed:")
+	}
+
+	if len(args) == 0 {
+		return errors.New("AUTO_SCALING_GROUP_NAME is required")
+	}
+
+	instanceIds := aws.StringSlice(viper.GetStringSlice("autoscaling.detach.instance-ids"))
+	loadBalancerNames := aws.StringSlice(viper.GetStringSlice("autoscaling.detach.load-balancer-names"))
+	options := goaws.AutoscalingDetachOptions{
+		AsgName:           args[0],
+		InstanceIds:       instanceIds,
+		LoadBalancerNames: loadBalancerNames,
+		Wait:              viper.GetBool("autoscaling.detach.wait"),
+	}
+
+	return client.AutoscalingDetach(options)
+}
+
+func newAutoscalingUpdateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "update AUTO_SCALING_GROUP_NAME",
+		Short: "Update autoscaling group",
+		RunE:  runAutoscalingUpdateCmd,
+	}
+
+	flags := cmd.Flags()
+	flags.Int64P("desired-capacity", "c", -1, "The number of EC2 instances that should be running in the Auto Scaling group.")
+	flags.BoolP("wait", "w", false, "Wait until desired capacity instances are InService")
+
+	viper.BindPFlag("autoscaling.update.desired-capacity", flags.Lookup("desired-capacity")) // nolint: errcheck
+	viper.BindPFlag("autoscaling.update.wait", flags.Lookup("wait"))                         // nolint: errcheck
+
+	return cmd
+}
+
+func runAutoscalingUpdateCmd(cmd *cobra.Command, args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return errors.Wrap(err, "newClient failed:")
+	}
+
+	if len(args) == 0 {
+		return errors.New("AUTO_SCALING_GROUP_NAME is required")
+	}
+
+	desiredCapacity := viper.GetInt64("autoscaling.update.desired-capacity")
+	if desiredCapacity == -1 {
+		return errors.New("--desired-capacity is required")
+	}
+
+	options := goaws.AutoscalingUpdateOptions{
+		AsgName:         args[0],
+		DesiredCapacity: desiredCapacity,
+		Wait:            viper.GetBool("autoscaling.update.wait"),
+	}
+
+	return client.AutoscalingUpdate(options)
+}

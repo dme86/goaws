@@ -1,0 +1,74 @@
+package cmd
+
+import (
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"github.com/dme86/goaws/goaws"
+)
+
+func init() {
+	RootCmd.AddCommand(newELBCmd())
+}
+
+func newELBCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "elb",
+		Short: "Manage ELB resources",
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Help() // nolint: errcheck
+		},
+	}
+
+	cmd.AddCommand(
+		newELBLsCmd(),
+		newELBPsCmd(),
+	)
+
+	return cmd
+}
+
+func newELBLsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ls",
+		Short: "List ELB instances",
+		RunE:  runELBLsCmd,
+	}
+
+	return cmd
+}
+
+func runELBLsCmd(cmd *cobra.Command, args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return errors.Wrap(err, "newClient failed:")
+	}
+
+	return client.ELBLs()
+}
+
+func newELBPsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ps ELB_NAME",
+		Short: "Show ELB instances",
+		RunE:  runELBPsCmd,
+	}
+
+	return cmd
+}
+
+func runELBPsCmd(cmd *cobra.Command, args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return errors.Wrap(err, "newClient failed:")
+	}
+
+	if len(args) == 0 {
+		return errors.New("ELB_NAME is required")
+	}
+
+	options := goaws.ELBPsOptions{
+		LoadBalancerName: args[0],
+	}
+
+	return client.ELBPs(options)
+}

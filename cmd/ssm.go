@@ -1,0 +1,207 @@
+package cmd
+
+import (
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"github.com/dme86/goaws/goaws"
+)
+
+func init() {
+	RootCmd.AddCommand(newSSMCmd())
+}
+
+func newSSMCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ssm",
+		Short: "Manage SSM resources",
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Help() // nolint: errcheck
+		},
+	}
+
+	cmd.AddCommand(
+		newSSMParameterCmd(),
+	)
+
+	return cmd
+}
+
+func newSSMParameterCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "parameter",
+		Short: "Manage SSM parameter resources",
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Help() // nolint: errcheck
+		},
+	}
+
+	cmd.AddCommand(
+		newSSMParameterPutCmd(),
+		newSSMParameterGetCmd(),
+		newSSMParameterLsCmd(),
+		newSSMParameterEnvCmd(),
+		newSSMParameterDelCmd(),
+	)
+
+	return cmd
+}
+
+func newSSMParameterPutCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "put NAME VALUE",
+		Short: "Put SSM parameter",
+		RunE:  runSSMParameterPutCmd,
+	}
+
+	flags := cmd.Flags()
+	flags.StringP("key-id", "k", "", "KMS key ID or alias")
+
+	viper.BindPFlag("ssm.parameter.put.key-id", flags.Lookup("key-id")) // nolint: errcheck
+
+	return cmd
+}
+
+func runSSMParameterPutCmd(cmd *cobra.Command, args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return errors.Wrap(err, "newClient failed:")
+	}
+
+	if len(args) != 2 {
+		return errors.New("NAME and VALUE are required")
+	}
+
+	options := goaws.SSMParameterPutOptions{
+		Name:  args[0],
+		Value: args[1],
+		KeyID: viper.GetString("ssm.parameter.put.key-id"),
+	}
+
+	return client.SSMParameterPut(options)
+}
+
+func newSSMParameterGetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get NAME [...]",
+		Short: "Get SSM parameter",
+		RunE:  runSSMParameterGetCmd,
+	}
+
+	flags := cmd.Flags()
+	flags.BoolP("with-decryption", "d", true, "with KMS decryption")
+
+	viper.BindPFlag("ssm.parameter.get.with-decryption", flags.Lookup("with-decryption")) // nolint: errcheck
+	return cmd
+}
+
+func runSSMParameterGetCmd(cmd *cobra.Command, args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return errors.Wrap(err, "newClient failed:")
+	}
+
+	if len(args) == 0 {
+		return errors.New("NAME is required")
+	}
+
+	names := aws.StringSlice(args)
+	options := goaws.SSMParameterGetOptions{
+		Names:          names,
+		WithDecryption: viper.GetBool("ssm.parameter.get.with-decryption"),
+	}
+
+	return client.SSMParameterGet(options)
+}
+
+func newSSMParameterLsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ls",
+		Short: "List SSM parameters",
+		RunE:  runSSMParameterLsCmd,
+	}
+
+	flags := cmd.Flags()
+	flags.StringP("name", "n", "",
+		"Filter parameters by Name, such as foo.dev. The value of tag is assumed to be a prefix match",
+	)
+
+	viper.BindPFlag("ssm.parameter.ls.name", flags.Lookup("name")) // nolint: errcheck
+	return cmd
+}
+
+func runSSMParameterLsCmd(cmd *cobra.Command, args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return errors.Wrap(err, "newClient failed:")
+	}
+
+	options := goaws.SSMParameterLsOptions{
+		Name: viper.GetString("ssm.parameter.ls.name"),
+	}
+
+	return client.SSMParameterLs(options)
+}
+
+func newSSMParameterEnvCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "env NAME",
+		Short: "Print SSM parameters as a list of environment variables",
+		RunE:  runSSMParameterEnvCmd,
+	}
+
+	flags := cmd.Flags()
+	flags.BoolP("docker-format", "e", false, "Output in docker environment variables format such as -e KEY=VALUE")
+	flags.BoolP("quote", "q", false, "Wrap each value in single quote")
+
+	viper.BindPFlag("ssm.parameter.env.docker-format", flags.Lookup("docker-format")) // nolint: errcheck
+	viper.BindPFlag("ssm.parameter.env.quote", flags.Lookup("quote"))                 // nolint: errcheck
+	return cmd
+}
+
+func runSSMParameterEnvCmd(cmd *cobra.Command, args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return errors.Wrap(err, "newClient failed:")
+	}
+
+	if len(args) == 0 {
+		return errors.New("NAME is required")
+	}
+
+	options := goaws.SSMParameterEnvOptions{
+		Name:         args[0],
+		DockerFormat: viper.GetBool("ssm.parameter.env.docker-format"),
+		QuoteValue:   viper.GetBool("ssm.parameter.env.quote"),
+	}
+
+	return client.SSMParameterEnv(options)
+}
+
+func newSSMParameterDelCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "del NAME",
+		Short: "Delete SSM parameter",
+		RunE:  runSSMParameterDelCmd,
+	}
+
+	return cmd
+}
+
+func runSSMParameterDelCmd(cmd *cobra.Command, args []string) error {
+	client, err := newClient()
+	if err != nil {
+		return errors.Wrap(err, "newClient failed:")
+	}
+
+	if len(args) == 0 {
+		return errors.New("NAME is required")
+	}
+
+	options := goaws.SSMParameterDelOptions{
+		Name: args[0],
+	}
+
+	return client.SSMParameterDel(options)
+}
